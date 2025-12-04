@@ -51,26 +51,22 @@ def format_duration(duration):
     hours, remainder = divmod(int(duration), 3600)
     minutes, seconds = divmod(remainder, 60)
     formatted = []
-    if hours > 0:
+
+    if 0 <= hours < 10:
         formatted.append(f"0{hours}:")
-    else:
-        formatted.append("00:")
-    if minutes > 0:
-        if minutes < 10:
-            formatted.append(f"0{minutes}:")
-        else:
-            formatted.append(f"{minutes}:")
+    elif 10 <= hours:
+        formatted.append(f"{hours}:")
+
+    if 0 <= minutes < 10:
+        formatted.append(f"0{minutes}:")
     elif minutes >= 10:
         formatted.append(f"{minutes}:")
-    else:
-        formatted.append(f"{minutes}:")
-    if seconds > 0 or not formatted:
-        if seconds < 10:
-            formatted.append(f"0{seconds}")
-        else:
-            formatted.append(f"{seconds}")
-    else:
-        formatted.append("00:")
+
+    if 0 <= seconds < 10 or not formatted:
+        formatted.append(f"0{seconds}")
+    elif 10 <= seconds or not formatted:
+        formatted.append(f"{seconds}")
+
     return "".join(formatted)
 
 
