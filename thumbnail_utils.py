@@ -9,7 +9,7 @@ def thumbnail_creator(image_path=f"{BASE_DIR}/images/base.jpg", title="", name="
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
 
-    persian_font = ImageFont.truetype(f"{BASE_DIR}/fonts/B_Zar_Bold_0.ttf", size=100)
+    persian_font = ImageFont.truetype(f"{BASE_DIR}/fonts/B_Zar_Bold_0.ttf", size=70)
 
     image_width, image_height = image.size
 
@@ -19,7 +19,7 @@ def thumbnail_creator(image_path=f"{BASE_DIR}/images/base.jpg", title="", name="
     sample_bbox = draw.textbbox((0, 0), "Ay", font=persian_font)
     line_height = sample_bbox[3] - sample_bbox[1]
 
-    line_spacing = 90
+    line_spacing = 80
 
     # Compute total text height
     total_text_height = len(lines) * line_height + (len(lines) - 1) * line_spacing
