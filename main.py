@@ -1,19 +1,38 @@
+import asyncio
 import os
 import subprocess
 from pathlib import Path
 
-import telebot
+from telethon import TelegramClient
+from telethon.tl.types import InputMediaUploadedDocument, DocumentAttributeVideo
 
-from config import BOT_TOKEN, DB_PATH, VIDEOS_DIR, CHAT_IDS, PROXY_HOST, PROXY_PORT
+from config import (
+    API_ID,
+    API_HASH,
+    DB_PATH,
+    VIDEOS_DIR,
+    CHAT_IDS,
+    PROXY_HOST,
+    PROXY_PORT,
+)
 from db_management import Database
 from thumbnail_utils import thumbnail_creator
 
 BASE_DIR = Path(__file__).resolve().parent
-bot = telebot.TeleBot(BOT_TOKEN)
+
+# Initialize Telethon client (for user account, not bot)
+client = TelegramClient(
+    "video_uploader",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    proxy=("socks5", PROXY_HOST, PROXY_PORT),
+)
+
 db = Database(DB_PATH)
 
 
 def scan_videos_directory():
+    """Scan videos directory for new files"""
     print("Scanning videos directory for new files...")
     list_of_videos = [v for v in os.listdir(VIDEOS_DIR) if v.endswith(".mp4")]
     for video_name in list_of_videos:
@@ -24,6 +43,7 @@ def scan_videos_directory():
 
 
 def get_video_duration(file_path):
+    """Get video duration using ffprobe"""
     try:
         result = subprocess.run(
             [
@@ -48,6 +68,7 @@ def get_video_duration(file_path):
 
 
 def format_duration(duration):
+    """Format duration as HH:MM:SS"""
     hours, remainder = divmod(int(duration), 3600)
     minutes, seconds = divmod(remainder, 60)
     formatted = []
@@ -71,6 +92,7 @@ def format_duration(duration):
 
 
 def video_durations(file_name):
+    """Get video duration and formatted duration"""
     directory = VIDEOS_DIR
     file_path = os.path.join(directory, file_name)
     duration = get_video_duration(file_path)
@@ -79,6 +101,7 @@ def video_durations(file_name):
 
 
 def made_caption(video_name):
+    """Create caption for video"""
     base_name = video_name.split(".")[1]
     date_part, time_part = base_name.split("-")
     formatted_date = date_part.replace("_", "/").replace("shiraz", "")
@@ -93,15 +116,14 @@ def made_caption(video_name):
     )
 
 
-def upload_videos():
+async def upload_videos():
+    """Upload videos to Telegram channels/groups"""
     print("Starting video upload...")
     unuploaded_videos = db.list_unload_videos()
+
     if not unuploaded_videos:
         print("No videos to upload.")
         return
-    if PROXY_HOST and PROXY_PORT:
-        proxy_url = f"socks5h://{PROXY_HOST}:{PROXY_PORT}"
-        telebot.apihelper.proxy = {"http": proxy_url, "https": proxy_url}
 
     for video_name in unuploaded_videos:
         video_path = os.path.join(VIDEOS_DIR, video_name)
@@ -113,36 +135,69 @@ def upload_videos():
             print(f"Uploading video: {video_name}")
             caption, duration, formatted_date, formatted_time = made_caption(video_name)
             formatted_time = ":".join(formatted_time.split(":")[:-1])
-            thumbnail_text = (
-                f"جلسه شورای شهر شیراز\nتاریخ {formatted_date}\nساعت {formatted_time}"
-            )
+            thumbnail_text = f"شورا\n{formatted_date}\n{formatted_time}"
+
+            # Create thumbnail
             thumbnail_path = thumbnail_creator(
                 title=thumbnail_text, name=video_name[:-4]
             )
-            flag = False
+            # Prepare thumbnail if exists
+            thumb = None
+            if os.path.exists(thumbnail_path):
+                thumb = await client.upload_file(thumbnail_path)
+
+            uploaded = await client.upload_file(video_path)
+
+            upload_success = False
+
+            # Upload video to each chat
             for chat_id in CHAT_IDS:
-                if os.path.exists(thumbnail_path):
-                    bot.send_video(
-                        chat_id=chat_id,
-                        video=open(video_path, "rb"),
-                        caption=caption,
-                        duration=duration,
-                        thumb=open(thumbnail_path, "rb"),
+                try:
+                    attributes = [
+                        DocumentAttributeVideo(
+                            duration=duration, w=1280, h=960, supports_streaming=True
+                        )
+                    ]
+
+                    media = InputMediaUploadedDocument(
+                        file=uploaded,
+                        mime_type="video/mp4",
+                        attributes=attributes,
+                        thumb=thumb,
                     )
-                    flag = True
-                else:
-                    bot.send_video(
-                        chat_id=chat_id,
-                        video=open(video_path, "rb"),
-                        caption=caption,
-                        duration=duration,
-                    )
-            os.remove(thumbnail_path) if flag else None
-            db.upload_video(video_name)
-            print(f"Successfully uploaded: {video_name}")
+
+                    await client.send_message(chat_id, message=caption, file=media)
+                    upload_success = True
+                    print(f"Uploaded to {chat_id}")
+
+                except Exception as e:
+                    print(f"Failed to upload to {chat_id}: {e}")
+
+            # Clean up and update database
+            if os.path.exists(thumbnail_path):
+                os.remove(thumbnail_path)
+
+            if upload_success:
+                db.upload_video(video_name)
+                print(f"Successfully uploaded: {video_name}")
+            else:
+                print(f"Failed to upload {video_name} to any destination")
+
         except Exception as e:
             print(f"Failed to upload {video_name}: {e}")
 
 
-scan_videos_directory()
-upload_videos()
+async def main():
+    """Main async function"""
+    await client.start()
+    print("Client connected")
+
+    scan_videos_directory()
+    await upload_videos()
+
+    await client.disconnect()
+    print("Done")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
