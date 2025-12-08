@@ -133,9 +133,7 @@ def upload_videos():
                     video_name
                 )
                 formatted_time = ":".join(formatted_time.split(":")[:-1])
-                thumbnail_text = (
-                    f"شورای شهر شهراز\nتاریخ {formatted_date}\nساعت {formatted_time}"
-                )
+                thumbnail_text = f"جلسه شورای شهر شیراز\nتاریخ {formatted_date}\nساعت {formatted_time}"
 
                 # Create thumbnail
                 thumbnail_path = thumbnail_creator(
